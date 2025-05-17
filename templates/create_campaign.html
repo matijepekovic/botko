@@ -1,0 +1,102 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Create Campaign{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                <li class="active"><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+                <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Create New Campaign</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Settings</h3>
+                </div>
+                <div class="panel-body">
+                    <form method="post" action="{{ url_for('create_campaign') }}">
+                        <div class="form-group">
+                            <label for="name">Campaign Name:</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                            <small class="form-text text-muted">A descriptive name for this campaign.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="category">Category:</label>
+                            <input type="text" class="form-control" id="category" name="category" value="Home Sales Consultations" required>
+                            <small class="form-text text-muted">The category will be used to generate relevant topics.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="posts_per_day">Posts Per Day:</label>
+                            <select class="form-control" id="posts_per_day" name="posts_per_day">
+                                <option value="1">1 post per day</option>
+                                <option value="2">2 posts per day</option>
+                                <option value="3">3 posts per day</option>
+                                <option value="5">5 posts per day</option>
+                            </select>
+                            <small class="form-text text-muted">How many LinkedIn posts to publish each day.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="duration_days">Campaign Duration (days):</label>
+                            <input type="number" class="form-control" id="duration_days" name="duration_days" value="30" min="1" max="365" required>
+                            <small class="form-text text-muted">How long this campaign should run.</small>
+                        </div>
+                        
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="requires_review"> Require review for all posts
+                            </label>
+                            <p class="text-muted">If checked, you'll be notified to review posts before they go live.</p>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Create Campaign</button>
+                        <a href="{{ url_for('list_campaigns') }}" class="btn btn-default">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Workflow</h3>
+                </div>
+                <div class="panel-body">
+                    <ol>
+                        <li>Create the campaign</li>
+                        <li>Generate topics using AI</li>
+                        <li>Generate content for each topic</li>
+                        <li>Schedule posts based on your frequency settings</li>
+                        <li>Review posts before they go live (optional)</li>
+                    </ol>
+                    <p>The system will automatically distribute your posts throughout your campaign duration.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

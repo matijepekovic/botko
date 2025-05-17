@@ -1,0 +1,63 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Import Content from CSV{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li class="active"><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Import Content from CSV</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">CSV Format Instructions</h3>
+                </div>
+                <div class="panel-body">
+                    <p>Your CSV file should have the following format:</p>
+                    <pre>PostContent,Category
+"Your first post content here #hashtag",Professional
+"Your second post content here #hashtag",Tech</pre>
+                    <p>Notes:</p>
+                    <ul>
+                        <li>First row should be the header row</li>
+                        <li>First column is the post content</li>
+                        <li>Second column is the optional category</li>
+                        <li>If post content contains commas, surround it with quotes</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <form method="post" action="{{ url_for('import_csv') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">Select CSV File</label>
+                    <input type="file" class="form-control-file" id="csv_file" name="csv_file" accept=".csv" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Import Content</button>
+                <a href="{{ url_for('content_repository') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

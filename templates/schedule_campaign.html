@@ -1,0 +1,74 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Schedule Campaign Posts{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                <li class="active"><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+                <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Schedule Campaign Posts</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Schedule Posts</h3>
+                </div>
+                <div class="panel-body">
+                    <p>Ready to schedule your campaign posts? This will:</p>
+                    <ul>
+                        <li>Take content from your campaign repository</li>
+                        <li>Automatically distribute posts according to your campaign settings</li>
+                        <li>Schedule posts during business hours on weekdays</li>
+                        <li>Avoid scheduling posts in the past</li>
+                    </ul>
+                    
+                    <form method="post" action="{{ url_for('schedule_campaign', campaign_id=campaign_id) }}">
+                        <button type="submit" class="btn btn-success btn-lg">Schedule Campaign Posts</button>
+                        <a href="{{ url_for('campaign_detail', campaign_id=campaign_id) }}" class="btn btn-default">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Scheduling Information</h3>
+                </div>
+                <div class="panel-body">
+                    <p>The scheduling system will:</p>
+                    <ul>
+                        <li>Post during business hours (9am-5pm)</li>
+                        <li>Distribute posts evenly throughout your campaign duration</li>
+                        <li>Only schedule on weekdays (Monday-Friday)</li>
+                        <li>Mark posts for review if you enabled that setting</li>
+                    </ul>
+                    <p>You'll be able to see all scheduled posts on your main dashboard after scheduling.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
