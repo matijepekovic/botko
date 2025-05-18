@@ -1,0 +1,108 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Campaign Content{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                <li class="active"><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+                <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+        <li><a href="{{ url_for('campaign_detail', campaign_id=campaign.id) }}">{{ campaign.name }}</a></li>
+        <li class="active">Generated Content</li>
+    </ol>
+
+    <h1 class="mt-4 mb-4">Generated Content for Campaign: {{ campaign.name }}</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <p>Category: <strong>{{ campaign.category }}</strong></p>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('generate_campaign_content', campaign_id=campaign.id) }}" class="btn btn-primary">Generate More Content</a>
+            <a href="{{ url_for('campaign_detail', campaign_id=campaign.id) }}" class="btn btn-default">Back to Campaign</a>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            {% if content %}
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">Generated LinkedIn Posts ({{ content|length }})</h3>
+                    </div>
+                    <div class="panel-body">
+                        {% for item in content %}
+                            <div class="content-item panel {% if item.is_used %}panel-default{% else %}panel-primary{% endif %} mb-3">
+                                <div class="panel-heading">
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <strong>Topic:</strong> {{ item.topic }}
+                                        </div>
+                                        <div class="col-md-4 text-right">
+                                            <span class="label {% if item.is_used %}label-default{% else %}label-success{% endif %}">
+                                                {% if item.is_used %}Used{% else %}Available{% endif %}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="panel-body">
+                                    <div style="white-space: pre-wrap;">{{ item.text }}</div>
+                                </div>
+                                <div class="panel-footer">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <small class="text-muted">ID: {{ item.id }} | Created: {{ item.created_at }}</small>
+                                        </div>
+                                        <div class="col-md-6 text-right">
+                                            {% if item.is_used %}
+                                                <form method="post" action="{{ url_for('reset_content', content_id=item.id) }}" style="display:inline;">
+                                                    <button type="submit" class="btn btn-info btn-xs">Reset Status</button>
+                                                </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <p>No content has been generated for this campaign yet. Click "Generate More Content" to create some.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .content-item {
+        margin-bottom: 20px;
+    }
+    .mb-3 {
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}

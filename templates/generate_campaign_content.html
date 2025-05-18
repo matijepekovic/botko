@@ -2,6 +2,64 @@
 
 {% block title %}Generate Campaign Content{% endblock %}
 
+{% block styles %}
+    {{ super() }}
+    <style>
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        #loading-text {
+            margin-top: 20px;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        #progress-container {
+            width: 80%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        
+        #progress-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: #00ff00;
+        }
+        
+        .processing-spinner {
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #3498db;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <nav class="navbar navbar-default">
@@ -36,7 +94,7 @@
                     <h3 class="panel-title">Content Generation</h3>
                 </div>
                 <div class="panel-body">
-                    <form method="post" action="{{ url_for('generate_campaign_content', campaign_id=campaign_id) }}">
+                    <form id="content-generation-form" method="post" action="{{ url_for('generate_campaign_content', campaign_id=campaign_id) }}">
                         <div class="form-group">
                             <label for="provider_name">AI Provider:</label>
                             <select class="form-control" id="provider_name" name="provider_name">
@@ -53,13 +111,7 @@
                             <small class="text-muted">Your API key is not stored on the server.</small>
                         </div>
                         
-                        <div class="form-group">
-                            <label for="num_posts">Number of Posts to Generate:</label>
-                            <input type="number" class="form-control" id="num_posts" name="num_posts" value="5" min="1" max="20" required>
-                            <small class="text-muted">How many LinkedIn posts to create.</small>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary">Generate Content</button>
+                        <button type="submit" class="btn btn-primary">Generate Content for All Topics</button>
                         <a href="{{ url_for('campaign_detail', campaign_id=campaign_id) }}" class="btn btn-default">Cancel</a>
                     </form>
                 </div>
@@ -75,7 +127,7 @@
                     <p>This step transforms your topics into complete LinkedIn posts using AI.</p>
                     <p>The system will:</p>
                     <ul>
-                        <li>Select unused topics from your campaign</li>
+                        <li>Select all unused topics from your campaign</li>
                         <li>Generate professional content for each topic</li>
                         <li>Adapt content length based on topic complexity</li>
                         <li>Include relevant hashtags and calls to action</li>
@@ -97,4 +149,162 @@
         </div>
     </div>
 </div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+    <div class="processing-spinner"></div>
+    <div id="loading-text">Generating content for all topics...</div>
+    <div id="progress-container">
+        <div class="progress">
+            <div id="progress-bar" class="progress-bar progress-bar-striped active" role="progressbar" style="width: 0%;">
+                0%
+            </div>
+        </div>
+    </div>
+    <div id="progress-log"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        // Wait for document to be ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get elements
+            var form = document.getElementById('content-generation-form');
+            var overlay = document.getElementById('loading-overlay');
+            var progressBar = document.getElementById('progress-bar');
+            var progressLog = document.getElementById('progress-log');
+            var campaignId = {{ campaign_id }};
+            
+            // Form submit handler
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                startGeneration();
+            });
+            
+            // Start the generation process
+            function startGeneration() {
+                // Show overlay
+                overlay.style.display = 'flex';
+                progressLog.textContent = 'Starting content generation...';
+                
+                // Prepare form data
+                var formData = new FormData(form);
+                
+                // Send AJAX request
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', form.action);
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.status === 'success') {
+                            // Start polling for progress
+                            startPolling();
+                        } else {
+                            // Show error
+                            progressLog.textContent += '\nError: ' + response.message;
+                        }
+                    } else {
+                        progressLog.textContent += '\nError: Request failed';
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    progressLog.textContent += '\nError: Network error occurred';
+                };
+                
+                xhr.send(formData);
+            }
+            
+            // Poll for progress updates
+            function startPolling() {
+                pollProgress();
+            }
+            
+            function pollProgress() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/campaign/' + campaignId + '/generate_content/progress');
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        var data = JSON.parse(xhr.responseText);
+                        
+                        // Update progress UI
+                        updateProgressBar(data.completed, data.total);
+                        updateProgressLog(data.messages);
+                        
+                        // Check status
+                        if (data.status === 'success' || data.status === 'completed') {
+                            // Process complete, redirect
+                            progressLog.textContent += '\nComplete! Redirecting to content page...';
+                            setTimeout(function() {
+                                window.location.href = '/campaign/' + campaignId + '/content';
+                            }, 1500);
+                        } else if (data.status === 'in_progress') {
+                            // Still in progress, continue polling
+                            setTimeout(pollProgress, 1000);
+                        } else if (data.status === 'error') {
+                            // Error occurred
+                            progressLog.textContent += '\nError: ' + data.message;
+                        } else {
+                            // Unknown status, poll again
+                            setTimeout(pollProgress, 2000);
+                        }
+                    } else {
+                        // Error with request
+                        setTimeout(pollProgress, 2000);
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    // Network error, try again
+                    setTimeout(pollProgress, 2000);
+                };
+                
+                xhr.send();
+            }
+            
+            // Update progress bar
+            function updateProgressBar(completed, total) {
+                var percent = 0;
+                if (total > 0) {
+                    percent = Math.round((completed / total) * 100);
+                }
+                
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = percent + '% (' + completed + '/' + total + ')';
+            }
+            
+            // Update progress log
+            function updateProgressLog(messages) {
+                if (!messages || messages.length === 0) {
+                    return;
+                }
+                
+                // Get current messages
+                var currentText = progressLog.textContent;
+                var currentLines = currentText.split('\n').filter(function(line) {
+                    return line.trim() !== '';
+                });
+                
+                // Add only new messages
+                var newMessages = [];
+                for (var i = 0; i < messages.length; i++) {
+                    var message = messages[i];
+                    if (currentLines.indexOf(message) === -1) {
+                        newMessages.push(message);
+                    }
+                }
+                
+                if (newMessages.length > 0) {
+                    progressLog.textContent += '\n' + newMessages.join('\n');
+                    // Scroll to bottom
+                    progressLog.scrollTop = progressLog.scrollHeight;
+                }
+            }
+        });
+    </script>
 {% endblock %}

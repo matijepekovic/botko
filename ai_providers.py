@@ -55,14 +55,14 @@ class ClaudeProvider(AIProvider):
         client = anthropic.Anthropic(api_key=self.api_key)
         
         response = client.messages.create(
-            model="claude-3-sonnet-20240229",
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system="You are an expert real estate marketing consultant with years of experience in home sales.",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+    model="claude-3-7-sonnet-20250219",  # Updated to the latest Claude model as of May 2025
+    max_tokens=max_tokens,
+    temperature=temperature,
+    system="You are an expert real estate marketing consultant with years of experience in home sales.",
+    messages=[
+        {"role": "user", "content": prompt}
+    ]
+)
         
         return response.content[0].text
 

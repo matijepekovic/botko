@@ -96,10 +96,21 @@
                 <div class="panel-body">
                     <div class="btn-group-vertical" style="width:100%;">
                         <a href="{{ url_for('generate_campaign_topics', campaign_id=campaign.id) }}" class="btn btn-primary">Generate Topics</a>
+                        <a href="{{ url_for('campaign_topics', campaign_id=campaign.id) }}" class="btn btn-info">View & Manage Topics ({{ campaign.topic_count }})</a>
                         <a href="{{ url_for('generate_campaign_content', campaign_id=campaign.id) }}" class="btn btn-info" {% if campaign.unused_topic_count == 0 %}disabled{% endif %}>Generate Content</a>
                         <a href="{{ url_for('schedule_campaign', campaign_id=campaign.id) }}" class="btn btn-success">Schedule Posts</a>
                         <a href="{{ url_for('list_campaigns') }}" class="btn btn-default">Back to Campaigns</a>
+                          <a href="{{ url_for('campaign_content', campaign_id=campaign.id) }}" class="btn btn-info">View Generated Content</a>
+        
+        <a href="{{ url_for('schedule_campaign', campaign_id=campaign.id) }}" class="btn btn-success">Schedule Posts</a>
+        <a href="{{ url_for('list_campaigns') }}" class="btn btn-default">Back to Campaigns</a>
                     </div>
+                    
+                    <hr style="margin-top: 15px; margin-bottom: 15px;">
+                    
+                    <form method="post" action="{{ url_for('delete_campaign', campaign_id=campaign.id) }}" style="display:block;">
+                        <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('WARNING: Are you sure you want to delete this campaign?\n\nThis will permanently delete all topics, content, and settings associated with this campaign.')">Delete Campaign</button>
+                    </form>
                 </div>
             </div>
         </div>

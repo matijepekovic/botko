@@ -10,9 +10,11 @@
                 <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
             </div>
             <ul class="nav navbar-nav">
-                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
-                <li class="active"><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
-                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                 <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+    <li class="active"><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+    <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+    <li><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+    <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
             </ul>
         </div>
     </nav>

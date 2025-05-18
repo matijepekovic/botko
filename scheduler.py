@@ -16,18 +16,20 @@ class LinkedInScheduler:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Original scheduled_posts table
+        # scheduled_posts table with all needed columns
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS scheduled_posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_text TEXT NOT NULL,
             schedule_time TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            needs_review INTEGER DEFAULT 0,
+            reviewed INTEGER DEFAULT 0
         )
         ''')
         
-        # New content_repository table for bulk posts
+        # content_repository table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS content_repository (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,9 +40,156 @@ class LinkedInScheduler:
         )
         ''')
         
+        # campaigns table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            posts_per_day INTEGER NOT NULL,
+            duration_days INTEGER NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            requires_review INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # campaign_topics table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS campaign_topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL,
+            topic TEXT NOT NULL,
+            is_used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
+        )
+        ''')
+        
+        # Check and add columns to existing tables if needed
+        
+        # Check scheduled_posts table
+        cursor.execute("PRAGMA table_info(scheduled_posts)")
+        columns = {column[1] for column in cursor.fetchall()}
+        
+        # Add missing columns to scheduled_posts
+        required_columns = {
+            'needs_review': 'INTEGER DEFAULT 0',
+            'reviewed': 'INTEGER DEFAULT 0'
+        }
+        
+        for col_name, col_type in required_columns.items():
+            if col_name not in columns:
+                try:
+                    cursor.execute(f'ALTER TABLE scheduled_posts ADD COLUMN {col_name} {col_type}')
+                    print(f"Added {col_name} column to scheduled_posts table")
+                except sqlite3.OperationalError as e:
+                    print(f"Error adding column {col_name}: {str(e)}")
+        
         conn.commit()
         conn.close()
         print(f"Database initialized at {self.db_path}")
+    
+    def get_campaign_topics(self, campaign_id):
+        """Get all topics for a specific campaign"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, topic, is_used, created_at 
+            FROM campaign_topics 
+            WHERE campaign_id = ?
+            ORDER BY is_used, id
+            """, 
+            (campaign_id,)
+        )
+        topics = cursor.fetchall()
+        conn.close()
+        return topics
+
+    def update_campaign_topic(self, topic_id, new_topic):
+        """Update a campaign topic"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE campaign_topics SET topic = ? WHERE id = ?", 
+            (new_topic, topic_id)
+        )
+        conn.commit()
+        conn.close()
+        print(f"Topic {topic_id} updated to: {new_topic}")
+        return True
+
+    def delete_campaign_topic(self, topic_id):
+        """Delete a campaign topic"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM campaign_topics WHERE id = ?", (topic_id,))
+        conn.commit()
+        conn.close()
+        print(f"Topic {topic_id} deleted")
+        return True
+    
+    def delete_all_campaign_topics(self, campaign_id):
+        """Delete all topics for a specific campaign"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Get count of topics before deletion
+            cursor.execute("SELECT COUNT(*) FROM campaign_topics WHERE campaign_id = ?", (campaign_id,))
+            topic_count = cursor.fetchone()[0]
+            
+            # Delete all topics
+            cursor.execute("DELETE FROM campaign_topics WHERE campaign_id = ?", (campaign_id,))
+            conn.commit()
+            
+            print(f"Deleted all {topic_count} topics for campaign {campaign_id}")
+            return topic_count
+        except Exception as e:
+            print(f"Error deleting topics for campaign {campaign_id}: {str(e)}")
+            raise
+        finally:
+            conn.close()
+    
+    def delete_campaign(self, campaign_id):
+        """Delete a campaign and its related data"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Start a transaction
+            conn.execute("BEGIN TRANSACTION")
+            
+            # First, get all topics for this campaign
+            cursor.execute("SELECT id FROM campaign_topics WHERE campaign_id = ?", (campaign_id,))
+            topic_ids = [row[0] for row in cursor.fetchall()]
+            
+            # Delete the topics
+            if topic_ids:
+                cursor.execute("DELETE FROM campaign_topics WHERE campaign_id = ?", (campaign_id,))
+                print(f"Deleted {len(topic_ids)} topics for campaign {campaign_id}")
+            
+            # Delete any content in the repository associated with this campaign
+            cursor.execute("DELETE FROM content_repository WHERE category LIKE ?", (f"Campaign: {campaign_id}%",))
+            content_count = cursor.rowcount
+            
+            # Finally, delete the campaign itself
+            cursor.execute("DELETE FROM campaigns WHERE id = ?", (campaign_id,))
+            
+            # Commit the transaction
+            conn.commit()
+            print(f"Campaign {campaign_id} deleted successfully")
+            return True
+        except Exception as e:
+            # Rollback in case of error
+            conn.rollback()
+            print(f"Error deleting campaign {campaign_id}: {str(e)}")
+            raise
+        finally:
+            conn.close()
     
     def add_post(self, post_text, schedule_time):
         """
@@ -166,17 +315,35 @@ class LinkedInScheduler:
         Returns:
             The ID of the newly added content
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO content_repository (post_text, category) VALUES (?, ?)",
-            (post_text, category)
-        )
-        content_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        print(f"Content added to repository with ID {content_id}")
-        return content_id
+        max_retries = 5
+        retries = 0
+        
+        while retries < max_retries:
+            try:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO content_repository (post_text, category) VALUES (?, ?)",
+                    (post_text, category)
+                )
+                content_id = cursor.lastrowid
+                conn.commit()
+                conn.close()
+                print(f"Content added to repository with ID {content_id}")
+                return content_id
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    conn.close()
+                    retries += 1
+                    if retries >= max_retries:
+                        raise Exception(f"Failed to add content after {max_retries} attempts: {str(e)}")
+                    # Exponential backoff
+                    wait_time = 0.1 * (2 ** retries)
+                    time.sleep(wait_time)
+                else:
+                    # If it's a different error, re-raise it
+                    conn.close()
+                    raise
     
     def get_content_repository(self):
         """
@@ -344,6 +511,384 @@ class LinkedInScheduler:
         
         return scheduled_count
 
+    def create_campaign(self, name, category, posts_per_day, duration_days, requires_review=False):
+        """Create a new posting campaign"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Calculate start and end dates
+        start_date = datetime.utcnow()
+        end_date = start_date + timedelta(days=duration_days)
+        
+        # Insert the campaign
+        cursor.execute(
+            """
+            INSERT INTO campaigns 
+            (name, category, posts_per_day, duration_days, start_date, end_date, requires_review) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (name, category, posts_per_day, duration_days, 
+             start_date.isoformat(), end_date.isoformat(), 
+             1 if requires_review else 0)
+        )
+        
+        campaign_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        print(f"Campaign '{name}' created with ID {campaign_id}")
+        return campaign_id    
+
+    def generate_topics(self, campaign_id, num_topics=15, api_key=None, provider_name="openai"):
+        """Generate topics for a campaign using the selected AI provider"""
+        import ai_providers
+        
+        if not api_key:
+            raise ValueError("API key is required for topic generation")
+        
+        # Get the appropriate AI provider
+        provider = ai_providers.get_provider(provider_name, api_key)
+        
+        # Get campaign details
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT category FROM campaigns WHERE id = ?", (campaign_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            conn.close()
+            raise ValueError(f"Campaign with ID {campaign_id} not found")
+        
+        category = result[0]
+        
+        # Create the prompt for topic generation
+        prompt = f"""
+        Generate {num_topics} current and relevant sales topics that reflect what people in the field are dealing with right now.
+        STICK TO SALES: TECHIQUES, METHODS, TIPS, TRICKS, PSYCHOLOGY IN SALES.
+        The category: {category}.
+        
+        They should be practical, not academic. Avoid corporate buzzwords or fluff. Focus on real conversations, problems, and patterns that sales reps, consultants, and closers are facing in current year.
+        Topics should be written in plain English, like how someone would say it out loud. Keep them short and direct.
+        
+        Format your response as a simple list with one topic per line, without numbering or bullet points.
+        Each topic should be brief (3-8 words) but specific enough to generate a full LinkedIn post.
+        """
+        
+        try:
+            # Generate content using the selected provider
+            content = provider.generate_content(prompt, max_tokens=500, temperature=0.8)
+            
+            # Extract and process the generated topics
+            topics = [line.strip() for line in content.split('\n') if line.strip()]
+            
+            # Store the topics in the database
+            for topic in topics:
+                cursor.execute(
+                    "INSERT INTO campaign_topics (campaign_id, topic) VALUES (?, ?)",
+                    (campaign_id, topic)
+                )
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"Generated {len(topics)} topics for campaign {campaign_id}")
+            return len(topics)
+            
+        except Exception as e:
+            conn.close()
+            print(f"Error generating topics: {str(e)}")
+            raise
+
+    def schedule_campaign_posts(self, campaign_id):
+        """Schedule generated content according to campaign settings"""
+        # Get campaign details
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT name, posts_per_day, start_date, end_date, requires_review
+            FROM campaigns WHERE id = ?
+            """, 
+            (campaign_id,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            conn.close()
+            raise ValueError(f"Campaign with ID {campaign_id} not found")
+        
+        name, posts_per_day, start_date_str, end_date_str, requires_review = result
+        
+        # Get unscheduled content for this campaign
+        cursor.execute(
+            """
+            SELECT id, post_text FROM content_repository 
+            WHERE category LIKE ? AND is_used = 0
+            """,
+            (f"Campaign: {campaign_id}%",)
+        )
+        content = cursor.fetchall()
+        
+        if not content:
+            conn.close()
+            raise ValueError(f"No unscheduled content found for campaign {campaign_id}")
+        
+        # Parse dates
+        start_date = datetime.fromisoformat(start_date_str)
+        end_date = datetime.fromisoformat(end_date_str)
+        
+        # Calculate posting schedule
+        days_in_campaign = (end_date - start_date).days
+        total_posts = min(len(content), days_in_campaign * posts_per_day)
+        
+        # Create posting time slots
+        time_slots = []
+        current_date = start_date
+        
+        # Business hours distribution
+        posting_hours = [9, 11, 13, 15, 17]  # 9am, 11am, 1pm, 3pm, 5pm
+        
+        while current_date <= end_date and len(time_slots) < total_posts:
+            # Skip weekends if desired
+            if current_date.weekday() < 5:  # 0-4 are Monday to Friday
+                # Add time slots for today
+                for _ in range(posts_per_day):
+                    if len(time_slots) >= total_posts:
+                        break
+                        
+                    # Pick a random hour from business hours
+                    hour = random.choice(posting_hours)
+                    minute = random.randint(0, 59)
+                    
+                    post_time = current_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    
+                    # Don't schedule in the past
+                    if post_time > datetime.utcnow():
+                        time_slots.append(post_time)
+            
+            current_date += timedelta(days=1)
+        
+        # Schedule posts
+        scheduled_count = 0
+        for i, post_time in enumerate(time_slots):
+            if i < len(content):
+                content_id, post_text = content[i]
+                
+                # Schedule the post
+                post_id = self.add_post(post_text, post_time.isoformat())
+                
+                # Mark content as used
+                cursor.execute(
+                    "UPDATE content_repository SET is_used = 1 WHERE id = ?",
+                    (content_id,)
+                )
+                
+                # If review is required, mark post for review
+                if requires_review:
+                    cursor.execute(
+                        "UPDATE scheduled_posts SET needs_review = 1 WHERE id = ?",
+                        (post_id,)
+                    )
+                
+                scheduled_count += 1
+        
+        conn.commit()
+        conn.close()
+        return scheduled_count  
+
+    def get_posts_for_review(self, days_ahead=1):
+        """Get posts that need review and are scheduled within the specified days"""
+        # Get posts scheduled in the next X days that need review
+        now = datetime.utcnow()
+        future = now + timedelta(days=days_ahead)
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                """
+                SELECT id, post_text, schedule_time, status, created_at 
+                FROM scheduled_posts 
+                WHERE needs_review = 1 
+                AND reviewed = 0
+                AND schedule_time BETWEEN ? AND ? 
+                AND status = 'pending'
+                ORDER BY schedule_time
+                """,
+                (now.isoformat(), future.isoformat())
+            )
+            posts = cursor.fetchall()
+        except sqlite3.OperationalError as e:
+            print(f"Error in get_posts_for_review: {str(e)}")
+            # Return empty list if there's an error (e.g., columns don't exist yet)
+            posts = []
+        finally:
+            conn.close()
+        
+        return posts
+
+    def send_review_notifications(self):
+        """Send notifications for posts that need review tomorrow"""
+        posts = self.get_posts_for_review(days_ahead=1)
+        
+        if posts:
+            print("===== POSTS REQUIRING REVIEW =====")
+            print(f"Found {len(posts)} posts scheduled for tomorrow that need review:")
+            for post_id, text, schedule_time, status, created_at in posts:
+                try:
+                    schedule_datetime = datetime.fromisoformat(schedule_time)
+                    formatted_time = schedule_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                except:
+                    formatted_time = schedule_time
+                    
+                print(f"Post ID: {post_id} | Scheduled for: {formatted_time}")
+                print(f"Text preview: {text[:100]}..." if len(text) > 100 else f"Text: {text}")
+                print("-" * 50)
+            
+            print("===== END OF NOTIFICATIONS =====")
+            
+            # In a real implementation, you could send emails or other notifications here
+            # For example:
+            # self.send_email_notification(posts)
+            
+            return len(posts)
+        else:
+            print("No posts require review for tomorrow.")
+            return 0
+
+    def generate_content_for_campaign(self, campaign_id, api_key=None, provider_name="openai"):
+        """Generate content for all unused campaign topics using the selected AI provider"""
+        import ai_providers
+        import time
+        
+        if not api_key:
+            raise ValueError("API key is required for content generation")
+        
+        # Get the appropriate AI provider
+        provider = ai_providers.get_provider(provider_name, api_key)
+        
+        # Get all unused topics for this campaign
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, topic FROM campaign_topics WHERE campaign_id = ? AND is_used = 0",
+            (campaign_id,)
+        )
+        topics = cursor.fetchall()
+        conn.close()  # Close connection immediately to avoid locking
+        
+        if not topics:
+            raise ValueError(f"No unused topics found for campaign {campaign_id}")
+        
+        # Get campaign category - use a separate connection
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT category FROM campaigns WHERE id = ?", (campaign_id,))
+        category = cursor.fetchone()[0]
+        conn.close()  # Close connection immediately
+        
+        generated_count = 0
+        for topic_id, topic in topics:
+            # Determine post complexity based on topic length and complexity
+            complexity = "simple" if len(topic.split()) < 4 else "detailed"
+            
+            # Create the prompt for content generation with your custom writing style
+            prompt = f"""
+            Write a professional LinkedIn post about "{topic}" for a sales consultant.
+            
+            This post should be {complexity} and include practical insights relevant to the 
+            {category} aspect of home sales.
+            
+            The tone should be professional but conversational, positioning the author as an 
+            expert in the field. Include a call to action at the end.
+            Do not say things that cannot be delivered or proven.
+            Example:Last week, I showed a couple in Denver how their outdated bathroom would look with three different layouts. They made their decision in minutes instead of days;
+            The numbers don't lie. My close rate jumped 22% when I started bundling service packages with premium materials;
+            My close rate on referrals is 68% versus 31% on cold leads. The difference? Trust is already built;
+            I had a client who chose the cheapest shower surround. Six months later, mold spots appeared at every seam. The replacement cost them three times the upgrade price I suggested;
+            IF YOU DO NOT KNOW SOME INFORMATION ON ME DO NOT MAKE IT UP!!
+            Write as a 28-year-old guy who lives in the U.S. but was born in Eastern Europe. The tone should be calm, confident, and direct. Avoid formal or fluffy language. Use short, plain English sentences. Keep it honest, grounded, and human. Sound like someone who's been in the field, not in a meeting.
+            
+            Writing Rules:
+            - Flesch reading score of 80 or higher
+            - Use active voice
+            - Avoid adverbs unless necessary
+            - No buzzwords, no fluff
+            - Use relevant sales or trade jargon when it fits
+            - Never say "its about this, its about that"
+            - Never use em dashes
+            - Never use the word "follow up," unless explaining what else to say instead
+            - Lightly swear once in every 8 posts (optional, natural tone only)
+            
+            Finish with 2-3 relevant hashtags.
+            
+            Keep the post under 1300 characters (LinkedIn's limit).
+            """
+            
+            try:
+                # Generate content using the selected provider
+                content = provider.generate_content(prompt, max_tokens=700, temperature=0.7)
+                
+                # Add to repository - this creates its own connection internally
+                content_id = self.add_bulk_content(content, f"Campaign: {campaign_id} - {topic}")
+                
+                # Mark topic as used - separate connection
+                max_retries = 5
+                retries = 0
+                while retries < max_retries:
+                    try:
+                        conn = sqlite3.connect(self.db_path)
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE campaign_topics SET is_used = 1 WHERE id = ?",
+                            (topic_id,)
+                        )
+                        conn.commit()
+                        conn.close()
+                        break  # Success, exit the retry loop
+                    except sqlite3.OperationalError as e:
+                        # Database is locked, retry after a delay
+                        conn.close()
+                        retries += 1
+                        if retries >= max_retries:
+                            print(f"Failed to mark topic {topic_id} as used after {max_retries} attempts.")
+                        else:
+                            # Exponential backoff: wait longer each retry
+                            wait_time = 0.1 * (2 ** retries)
+                            time.sleep(wait_time)
+                
+                generated_count += 1
+                print(f"Generated post for topic: {topic}")
+                
+                # Add a small delay between generations to reduce database contention
+                time.sleep(0.5)
+                    
+            except Exception as e:
+                print(f"Error generating content for topic '{topic}': {str(e)}")
+        
+        return generated_count
+
+    def get_campaign_content(self, campaign_id):
+        """Get all content generated for a specific campaign"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Get content associated with this campaign
+        cursor.execute(
+            """
+            SELECT id, post_text, category, is_used, created_at 
+            FROM content_repository 
+            WHERE category LIKE ? 
+            ORDER BY is_used, created_at DESC
+            """, 
+            (f"Campaign: {campaign_id}%",)
+        )
+        content = cursor.fetchall()
+        conn.close()
+        
+        return content
+
 # Example usage
 if __name__ == "__main__":
     # This code runs when scheduler.py is executed directly
@@ -359,354 +904,3 @@ if __name__ == "__main__":
     
     # Check and publish any pending posts
     scheduler.check_and_publish()
-
-def create_campaign(self, name, category, posts_per_day, duration_days, requires_review=False):
-    """Create a new posting campaign"""
-    conn = sqlite3.connect(self.db_path)
-    cursor = conn.cursor()
-    
-    # Create campaigns table if it doesn't exist
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS campaigns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        posts_per_day INTEGER NOT NULL,
-        duration_days INTEGER NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL,
-        requires_review INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'active',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    
-    # Calculate start and end dates
-    start_date = datetime.utcnow()
-    end_date = start_date + timedelta(days=duration_days)
-    
-    # Insert the campaign
-    cursor.execute(
-        """
-        INSERT INTO campaigns 
-        (name, category, posts_per_day, duration_days, start_date, end_date, requires_review) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (name, category, posts_per_day, duration_days, 
-         start_date.isoformat(), end_date.isoformat(), 
-         1 if requires_review else 0)
-    )
-    
-    campaign_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    
-    print(f"Campaign '{name}' created with ID {campaign_id}")
-    return campaign_id    
-
-def generate_topics(self, campaign_id, num_topics=15, api_key=None, provider_name="openai"):
-    """Generate topics for a campaign using the selected AI provider"""
-    import ai_providers
-    
-    if not api_key:
-        raise ValueError("API key is required for topic generation")
-    
-    # Get the appropriate AI provider
-    provider = ai_providers.get_provider(provider_name, api_key)
-    
-    # Get campaign details
-    conn = sqlite3.connect(self.db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT category FROM campaigns WHERE id = ?", (campaign_id,))
-    result = cursor.fetchone()
-    
-    if not result:
-        conn.close()
-        raise ValueError(f"Campaign with ID {campaign_id} not found")
-    
-    category = result[0]
-    
-    # Create topics table if it doesn't exist
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS campaign_topics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        campaign_id INTEGER NOT NULL,
-        topic TEXT NOT NULL,
-        is_used INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
-    )
-    ''')
-    
-    # Create the prompt for topic generation
-    prompt = f"""
-    Generate {num_topics} current and relevant sales topics that reflect what people in the field are dealing with right now.
-    The category: {category}.
-    
-    They should be practical, not academic. Avoid corporate buzzwords or fluff. Focus on real conversations, problems, and patterns that sales reps, consultants, and closers are facing in current year.
-    Topics should be written in plain English, like how someone would say it out loud. Keep them short and direct.
-    
-    Format your response as a simple list with one topic per line, without numbering or bullet points.
-    Each topic should be brief (3-8 words) but specific enough to generate a full LinkedIn post.
-    """
-    
-    try:
-        # Generate content using the selected provider
-        content = provider.generate_content(prompt, max_tokens=500, temperature=0.8)
-        
-        # Extract and process the generated topics
-        topics = [line.strip() for line in content.split('\n') if line.strip()]
-        
-        # Store the topics in the database
-        for topic in topics:
-            cursor.execute(
-                "INSERT INTO campaign_topics (campaign_id, topic) VALUES (?, ?)",
-                (campaign_id, topic)
-            )
-        
-        conn.commit()
-        conn.close()
-        
-        print(f"Generated {len(topics)} topics for campaign {campaign_id}")
-        return len(topics)
-        
-    except Exception as e:
-        conn.close()
-        print(f"Error generating topics: {str(e)}")
-        raise
-
-def schedule_campaign_posts(self, campaign_id):
-    """Schedule generated content according to campaign settings"""
-    # Get campaign details
-    conn = sqlite3.connect(self.db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT name, posts_per_day, start_date, end_date, requires_review
-        FROM campaigns WHERE id = ?
-        """, 
-        (campaign_id,)
-    )
-    result = cursor.fetchone()
-    
-    if not result:
-        conn.close()
-        raise ValueError(f"Campaign with ID {campaign_id} not found")
-    
-    name, posts_per_day, start_date_str, end_date_str, requires_review = result
-    
-    # Get unscheduled content for this campaign
-    cursor.execute(
-        """
-        SELECT id, post_text FROM content_repository 
-        WHERE category LIKE ? AND is_used = 0
-        """,
-        (f"Campaign: {campaign_id}%",)
-    )
-    content = cursor.fetchall()
-    
-    if not content:
-        conn.close()
-        raise ValueError(f"No unscheduled content found for campaign {campaign_id}")
-    
-    # Parse dates
-    start_date = datetime.fromisoformat(start_date_str)
-    end_date = datetime.fromisoformat(end_date_str)
-    
-    # Calculate posting schedule
-    days_in_campaign = (end_date - start_date).days
-    total_posts = min(len(content), days_in_campaign * posts_per_day)
-    
-    # Create posting time slots
-    time_slots = []
-    current_date = start_date
-    
-    # Business hours distribution
-    posting_hours = [9, 11, 13, 15, 17]  # 9am, 11am, 1pm, 3pm, 5pm
-    
-    while current_date <= end_date and len(time_slots) < total_posts:
-        # Skip weekends if desired
-        if current_date.weekday() < 5:  # 0-4 are Monday to Friday
-            # Add time slots for today
-            for _ in range(posts_per_day):
-                if len(time_slots) >= total_posts:
-                    break
-                    
-                # Pick a random hour from business hours
-                hour = random.choice(posting_hours)
-                minute = random.randint(0, 59)
-                
-                post_time = current_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                
-                # Don't schedule in the past
-                if post_time > datetime.utcnow():
-                    time_slots.append(post_time)
-        
-        current_date += timedelta(days=1)
-    
-    # Schedule posts
-    scheduled_count = 0
-    for i, post_time in enumerate(time_slots):
-        if i < len(content):
-            content_id, post_text = content[i]
-            
-            # Schedule the post
-            post_id = self.add_post(post_text, post_time.isoformat())
-            
-            # Mark content as used
-            cursor.execute(
-                "UPDATE content_repository SET is_used = 1 WHERE id = ?",
-                (content_id,)
-            )
-            
-            # If review is required, mark post for review
-            if requires_review:
-                cursor.execute(
-                    "UPDATE scheduled_posts SET needs_review = 1 WHERE id = ?",
-                    (post_id,)
-                )
-            
-            scheduled_count += 1
-    
-    conn.commit()
-    conn.close()
-    return scheduled_count  
-
-def get_posts_for_review(self, days_ahead=1):
-    """Get posts that need review and are scheduled within the specified days"""
-    from datetime import datetime, timedelta
-    
-    # Get posts scheduled in the next X days that need review
-    now = datetime.utcnow()
-    future = now + timedelta(days=days_ahead)
-    
-    conn = sqlite3.connect(self.db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT id, post_text, schedule_time, status, created_at 
-        FROM scheduled_posts 
-        WHERE needs_review = 1 
-        AND reviewed = 0
-        AND schedule_time BETWEEN ? AND ? 
-        AND status = 'pending'
-        ORDER BY schedule_time
-        """,
-        (now.isoformat(), future.isoformat())
-    )
-    posts = cursor.fetchall()
-    conn.close()
-    
-    return posts
-
-def send_review_notifications(self):
-    """Send notifications for posts that need review tomorrow"""
-    posts = self.get_posts_for_review(days_ahead=1)
-    
-    if posts:
-        print("===== POSTS REQUIRING REVIEW =====")
-        print(f"Found {len(posts)} posts scheduled for tomorrow that need review:")
-        for post_id, text, schedule_time, status, created_at in posts:
-            try:
-                schedule_datetime = datetime.fromisoformat(schedule_time)
-                formatted_time = schedule_datetime.strftime('%Y-%m-%d %H:%M:%S')
-            except:
-                formatted_time = schedule_time
-                
-            print(f"Post ID: {post_id} | Scheduled for: {formatted_time}")
-            print(f"Text preview: {text[:100]}..." if len(text) > 100 else f"Text: {text}")
-            print("-" * 50)
-        
-        print("===== END OF NOTIFICATIONS =====")
-        
-        # In a real implementation, you could send emails or other notifications here
-        # For example:
-        # self.send_email_notification(posts)
-        
-        return len(posts)
-    else:
-        print("No posts require review for tomorrow.")
-        return 0
-
-def generate_content_for_campaign(self, campaign_id, num_posts=5, api_key=None, provider_name="openai"):
-    """Generate content for a campaign's topics using the selected AI provider"""
-    import ai_providers
-    
-    if not api_key:
-        raise ValueError("API key is required for content generation")
-    
-    # Get the appropriate AI provider
-    provider = ai_providers.get_provider(provider_name, api_key)
-    
-    # Get unused topics for this campaign
-    conn = sqlite3.connect(self.db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, topic FROM campaign_topics WHERE campaign_id = ? AND is_used = 0 LIMIT ?",
-        (campaign_id, num_posts)
-    )
-    topics = cursor.fetchall()
-    
-    if not topics:
-        conn.close()
-        raise ValueError(f"No unused topics found for campaign {campaign_id}")
-    
-    # Get campaign category
-    cursor.execute("SELECT category FROM campaigns WHERE id = ?", (campaign_id,))
-    category = cursor.fetchone()[0]
-    
-    generated_count = 0
-    for topic_id, topic in topics:
-        # Determine post complexity based on topic length and complexity
-        complexity = "simple" if len(topic.split()) < 4 else "detailed"
-        
-        # Create the prompt for content generation with your custom writing style
-        prompt = f"""
-        Write a professional LinkedIn post about "{topic}" for a sales consultant.
-        
-        This post should be {complexity} and include practical insights relevant to the 
-        {category} aspect of home sales.
-        
-        The tone should be professional but conversational, positioning the author as an 
-        expert in the field. Include a call to action at the end.
-        
-        Write as a 28-year-old guy who lives in the U.S. but was born in Eastern Europe. The tone should be calm, confident, and direct. Avoid formal or fluffy language. Use short, plain English sentences. Keep it honest, grounded, and human. Sound like someone who's been in the field, not in a meeting.
-        
-        Writing Rules:
-        - Flesch reading score of 80 or higher
-        - Use active voice
-        - Avoid adverbs unless necessary
-        - No buzzwords, no fluff
-        - Use relevant sales or trade jargon when it fits
-        - Never say "its about this, its about that"
-        - Never use em dashes
-        - Never use the word "follow up," unless explaining what else to say instead
-        - Lightly swear once in every 8 posts (optional, natural tone only)
-        
-        Finish with 2-3 relevant hashtags.
-        
-        Keep the post under 1300 characters (LinkedIn's limit).
-        """
-        
-        try:
-            # Generate content using the selected provider
-            content = provider.generate_content(prompt, max_tokens=700, temperature=0.7)
-            
-            # Add to repository
-            content_id = self.add_bulk_content(content, f"Campaign: {campaign_id} - {topic}")
-            
-            # Mark topic as used
-            cursor.execute(
-                "UPDATE campaign_topics SET is_used = 1 WHERE id = ?",
-                (topic_id,)
-            )
-            
-            generated_count += 1
-            print(f"Generated post for topic: {topic}")
-                
-        except Exception as e:
-            print(f"Error generating content for topic '{topic}': {str(e)}")
-    
-    conn.commit()
-    conn.close()
-    return generated_count
