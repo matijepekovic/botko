@@ -18,7 +18,7 @@ class OpenAIProvider(AIProvider):
         response = openai.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are an expert sales consultant with years of experience in home sales."},
+                {"role": "system", "content": "You are an expert sales consultant experience in home sales."},
                 {"role": "user", "content": prompt}
             ],
             temperature=temperature,
@@ -58,7 +58,7 @@ class ClaudeProvider(AIProvider):
     model="claude-3-7-sonnet-20250219",  # Updated to the latest Claude model as of May 2025
     max_tokens=max_tokens,
     temperature=temperature,
-    system="You are an expert real estate marketing consultant with years of experience in home sales.",
+    system="You provide pure educational content and advice without any first-person perspective, personal claims, or specific metrics.",
     messages=[
         {"role": "user", "content": prompt}
     ]

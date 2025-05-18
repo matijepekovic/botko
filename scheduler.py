@@ -795,36 +795,53 @@ class LinkedInScheduler:
             
             # Create the prompt for content generation with your custom writing style
             prompt = f"""
-            Write a professional LinkedIn post about "{topic}" for a sales consultant.
-            
-            This post should be {complexity} and include practical insights relevant to the 
-            {category} aspect of home sales.
-            
-            The tone should be professional but conversational, positioning the author as an 
-            expert in the field. Include a call to action at the end.
-            Do not say things that cannot be delivered or proven.
-            Example:Last week, I showed a couple in Denver how their outdated bathroom would look with three different layouts. They made their decision in minutes instead of days;
-            The numbers don't lie. My close rate jumped 22% when I started bundling service packages with premium materials;
-            My close rate on referrals is 68% versus 31% on cold leads. The difference? Trust is already built;
-            I had a client who chose the cheapest shower surround. Six months later, mold spots appeared at every seam. The replacement cost them three times the upgrade price I suggested;
-            IF YOU DO NOT KNOW SOME INFORMATION ON ME DO NOT MAKE IT UP!!
-            Write as a 28-year-old guy who lives in the U.S. but was born in Eastern Europe. The tone should be calm, confident, and direct. Avoid formal or fluffy language. Use short, plain English sentences. Keep it honest, grounded, and human. Sound like someone who's been in the field, not in a meeting.
-            
-            Writing Rules:
-            - Flesch reading score of 80 or higher
-            - Use active voice
-            - Avoid adverbs unless necessary
-            - No buzzwords, no fluff
-            - Use relevant sales or trade jargon when it fits
-            - Never say "its about this, its about that"
-            - Never use em dashes
-            - Never use the word "follow up," unless explaining what else to say instead
-            - Lightly swear once in every 8 posts (optional, natural tone only)
-            
-            Finish with 2-3 relevant hashtags.
-            
-            Keep the post under 1300 characters (LinkedIn's limit).
-            """
+Write a professional LinkedIn post about "{topic}" for a sales consultant.
+
+The post should be {complexity} and provide practical sales advice related to {category}.
+
+IMPORTANT RULES - READ CAREFULLY:
+- NO STORYTELLING - Do not write in narrative form
+- NO PERSONAL EXPERIENCES - Do not use phrases like "I did" or "my client" 
+- NO MADE-UP STATISTICS OR DATA - Do not mention specific percentages or numbers unless citing sources
+- NO CLIENT STORIES OR ANECDOTES - Do not reference specific client situations
+- NO ASSUMPTIONS about the writer's background, experience, or company
+- JUST GIVE ADVICE - Focus solely on practical tips, methods, and actionable guidance
+- CITATION NEEDED - If quoting someone or referencing research, include the source
+
+FORMAT REQUIREMENTS:
+- ABSOLUTELY NO FIRST PERSON - Do not use "I", "me", "my", "we", or "our" anywhere
+- ABSOLUTELY NO STATISTICS - Do not mention any specific numbers, percentages, or metrics
+- ABSOLUTELY NO PERSONAL EXPERIENCES - Do not reference any specific projects, clients, or results
+- ABSOLUTELY NO "HERE'S WHAT WORKS FOR ME" - Do not frame advice as personal experience
+- NO STORYTELLING - Provide direct advice without narratives
+
+INSTEAD:
+- Write ONLY general advice and best practices
+- Use phrases like "Consider using..."
+- Present tips as industry knowledge, not personal experience
+- Keep everything theoretical and educational
+
+Voice and style:
+- Write as a 28-year-old man living in the US (with Eastern European background)
+- Use short, plain, direct sentences
+- Tone should be calm, confident, and straightforward
+- Keep it grounded and realistic without hype or exaggeration
+- Avoid overly formal language and corporate jargon
+
+Technical requirements:
+- Flesch reading score of 80+ (simple, clear language)
+- Active voice only
+- No adverbs unless absolutely necessary
+- No buzzwords or fluff phrases
+- Use relevant sales terminology when appropriate
+- Never use the phrase "it's about" or similar constructions
+- No em dashes
+- Never use "follow up" unless specifically explaining alternatives
+- Occasional light swearing is acceptable if natural (roughly 1 in 8 posts)
+
+End with a brief call to action and 2-3 relevant hashtags.
+Keep the entire post under 1300 characters (LinkedIn's limit).
+"""
             
             try:
                 # Generate content using the selected provider

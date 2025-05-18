@@ -943,6 +943,180 @@ def reset_all_content():
     flash('All content reset for reuse', 'success')
     return redirect(url_for('content_repository'))
 
+@app.route('/edit_content/<int:content_id>', methods=['GET', 'POST'])
+def edit_content(content_id):
+    """Edit content in repository"""
+    # Get the content item
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT post_text, category FROM content_repository WHERE id = ?",
+        (content_id,)
+    )
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        flash('Content not found', 'danger')
+        return redirect(url_for('content_repository'))
+    
+    post_text, category = result
+    
+    # Get campaign_id from category if this is campaign content
+    campaign_id = None
+    if category and category.startswith("Campaign:"):
+        try:
+            campaign_id = int(category.split(":")[1].strip().split(" ")[0])
+        except:
+            pass
+    
+    if request.method == 'POST':
+        new_text = request.form.get('post_text')
+        
+        if not new_text:
+            flash('Content cannot be empty', 'danger')
+            return redirect(url_for('edit_content', content_id=content_id))
+        
+        conn = sqlite3.connect(post_scheduler.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE content_repository SET post_text = ? WHERE id = ?",
+            (new_text, content_id)
+        )
+        conn.commit()
+        conn.close()
+        
+        flash('Content updated successfully', 'success')
+        
+        # Redirect based on origin
+        if campaign_id:
+            return redirect(url_for('campaign_content', campaign_id=campaign_id))
+        else:
+            return redirect(url_for('content_repository'))
+    
+    return render_template('edit_content.html', 
+                          content_id=content_id,
+                          post_text=post_text,
+                          category=category,
+                          campaign_id=campaign_id)
+
+@app.route('/delete_content/<int:content_id>', methods=['POST'])
+def delete_content(content_id):
+    """Delete content from repository"""
+    # Get campaign_id before deleting
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT category FROM content_repository WHERE id = ?", (content_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        flash('Content not found', 'danger')
+        return redirect(url_for('content_repository'))
+    
+    # Check if this is campaign content
+    campaign_id = None
+    category = result[0]
+    if category and category.startswith("Campaign:"):
+        try:
+            campaign_id = int(category.split(":")[1].strip().split(" ")[0])
+        except:
+            pass
+    
+    # Delete content
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM content_repository WHERE id = ?", (content_id,))
+    conn.commit()
+    conn.close()
+    
+    flash('Content deleted successfully', 'success')
+    
+    # Redirect based on origin
+    if campaign_id:
+        return redirect(url_for('campaign_content', campaign_id=campaign_id))
+    else:
+        return redirect(url_for('content_repository'))
+
+@app.route('/campaign/<int:campaign_id>/delete_all_content', methods=['POST'])
+def delete_all_campaign_content(campaign_id):
+    """Delete all content for a campaign"""
+    # Get campaign name for the flash message
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM campaigns WHERE id = ?", (campaign_id,))
+    result = cursor.fetchone()
+    
+    if not result:
+        conn.close()
+        flash('Campaign not found', 'danger')
+        return redirect(url_for('list_campaigns'))
+    
+    campaign_name = result[0]
+    
+    # Delete all content
+    cursor.execute(
+        "DELETE FROM content_repository WHERE category LIKE ?",
+        (f"Campaign: {campaign_id}%",)
+    )
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    flash(f'Successfully deleted all {deleted_count} content items for campaign "{campaign_name}"', 'success')
+    
+    return redirect(url_for('campaign_content', campaign_id=campaign_id))
+
+@app.route('/campaign/topic/<int:topic_id>/reset', methods=['POST'])
+def reset_campaign_topic(topic_id):
+    """Reset a campaign topic to 'not used' status"""
+    # Get campaign ID before resetting
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT campaign_id FROM campaign_topics WHERE id = ?", (topic_id,))
+    result = cursor.fetchone()
+    
+    if not result:
+        conn.close()
+        flash('Topic not found', 'danger')
+        return redirect(url_for('list_campaigns'))
+    
+    campaign_id = result[0]
+    
+    # Reset the topic status
+    cursor.execute("UPDATE campaign_topics SET is_used = 0 WHERE id = ?", (topic_id,))
+    conn.commit()
+    conn.close()
+    
+    flash('Topic has been reset and is available for content generation', 'success')
+    
+    return redirect(url_for('campaign_topics', campaign_id=campaign_id))
+
+@app.route('/campaign/<int:campaign_id>/reset_all_topics', methods=['POST'])
+def reset_all_campaign_topics(campaign_id):
+    """Reset all topics for a campaign to 'not used' status"""
+    # Get campaign name for the flash message
+    conn = sqlite3.connect(post_scheduler.db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM campaigns WHERE id = ?", (campaign_id,))
+    result = cursor.fetchone()
+    
+    if not result:
+        conn.close()
+        flash('Campaign not found', 'danger')
+        return redirect(url_for('list_campaigns'))
+    
+    campaign_name = result[0]
+    
+    # Reset all topics for this campaign
+    cursor.execute("UPDATE campaign_topics SET is_used = 0 WHERE campaign_id = ?", (campaign_id,))
+    reset_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    flash(f'Successfully reset {reset_count} topics for campaign "{campaign_name}"', 'success')
+    
+    return redirect(url_for('campaign_topics', campaign_id=campaign_id))
 @app.route('/campaign/<int:campaign_id>/delete', methods=['POST'])
 def delete_campaign(campaign_id):
     """Delete a campaign and all its associated data"""
@@ -1014,3 +1188,5 @@ if __name__ == '__main__':
         log_error("Failed to start Flask application", e)
         print("\nApplication failed to start. Check error_log.txt for details.")
         sys.exit(1)
+
+        

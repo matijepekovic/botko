@@ -40,11 +40,22 @@
             <p>Category: <strong>{{ campaign.category }}</strong></p>
         </div>
         <div class="col-md-4 text-right">
-            <a href="{{ url_for('generate_campaign_topics', campaign_id=campaign.id) }}" class="btn btn-primary">Generate More Topics</a>
-            <a href="{{ url_for('campaign_detail', campaign_id=campaign.id) }}" class="btn btn-default">Back to Campaign</a>
-             <form method="post" action="{{ url_for('delete_all_campaign_topics', campaign_id=campaign.id) }}" style="display:inline; margin-top: 10px;">
-            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete ALL topics for this campaign? This cannot be undone.')">Delete All Topics</button>
-        </form>
+            <div class="btn-group">
+                <a href="{{ url_for('generate_campaign_topics', campaign_id=campaign.id) }}" class="btn btn-primary">Generate More Topics</a>
+                <a href="{{ url_for('campaign_detail', campaign_id=campaign.id) }}" class="btn btn-default">Back to Campaign</a>
+            </div>
+            
+            <div class="btn-group mt-2" style="margin-top: 10px;">
+                {% if topics %}
+                    <form method="post" action="{{ url_for('reset_all_campaign_topics', campaign_id=campaign.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-info" onclick="return confirm('Are you sure you want to reset ALL topics? This will mark them as available for content generation.')">Reset All Topics</button>
+                    </form>
+                    
+                    <form method="post" action="{{ url_for('delete_all_campaign_topics', campaign_id=campaign.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete ALL topics for this campaign? This cannot be undone.')">Delete All Topics</button>
+                    </form>
+                {% endif %}
+            </div>
         </div>
     </div>
     
@@ -60,9 +71,9 @@
                             <thead>
                                 <tr>
                                     <th width="5%">ID</th>
-                                    <th width="65%">Topic</th>
+                                    <th width="55%">Topic</th>
                                     <th width="15%">Status</th>
-                                    <th width="15%">Actions</th>
+                                    <th width="25%">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -78,10 +89,20 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <a href="{{ url_for('edit_campaign_topic', topic_id=topic.id) }}" class="btn btn-sm btn-info">Edit</a>
-                                            <form method="post" action="{{ url_for('delete_campaign_topic', topic_id=topic.id) }}" style="display:inline;">
-                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this topic?')">Delete</button>
-                                            </form>
+                                            <div class="btn-group">
+                                                <a href="{{ url_for('edit_campaign_topic', topic_id=topic.id) }}" class="btn btn-sm btn-info">Edit</a>
+                                                
+                                                <!-- Reset button - only show for used topics -->
+                                                {% if topic.is_used %}
+                                                    <form method="post" action="{{ url_for('reset_campaign_topic', topic_id=topic.id) }}" style="display:inline;">
+                                                        <button type="submit" class="btn btn-sm btn-warning" title="Mark as available for content generation">Reset</button>
+                                                    </form>
+                                                {% endif %}
+                                                
+                                                <form method="post" action="{{ url_for('delete_campaign_topic', topic_id=topic.id) }}" style="display:inline;">
+                                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this topic?')">Delete</button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -97,4 +118,16 @@
         </div>
     </div>
 </div>
+
+<style>
+    /* Fix for inline forms in buttons */
+    .btn-group form {
+        display: inline-block;
+        margin: 0;
+    }
+    
+    .btn-group .btn {
+        margin-right: 2px;
+    }
+</style>
 {% endblock %}
