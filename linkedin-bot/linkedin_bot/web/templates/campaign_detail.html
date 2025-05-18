@@ -1,0 +1,155 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Campaign Details{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                <li class="active"><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+                <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Campaign: {{ campaign.name }}</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Details</h3>
+                </div>
+                <div class="panel-body">
+                    <table class="table">
+                        <tr>
+                            <th>Category:</th>
+                            <td>{{ campaign.category }}</td>
+                        </tr>
+                        <tr>
+                            <th>Posting Frequency:</th>
+                            <td>{{ campaign.posts_per_day }} posts per day</td>
+                        </tr>
+                        <tr>
+                            <th>Duration:</th>
+                            <td>{{ campaign.duration_days }} days</td>
+                        </tr>
+                        <tr>
+                            <th>Date Range:</th>
+                            <td>{{ campaign.start_date }} to {{ campaign.end_date }}</td>
+                        </tr>
+                        <tr>
+                            <th>Review Required:</th>
+                            <td>{{ "Yes" if campaign.requires_review else "No" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>{{ campaign.status|capitalize }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Progress</h3>
+                </div>
+                <div class="panel-body">
+                    <table class="table">
+                        <tr>
+                            <th>Topics Generated:</th>
+                            <td>{{ campaign.topic_count }}</td>
+                        </tr>
+                        <tr>
+                            <th>Unused Topics:</th>
+                            <td>{{ campaign.unused_topic_count }}</td>
+                        </tr>
+                        <tr>
+                            <th>Posts Scheduled:</th>
+                            <td>{{ campaign.scheduled_post_count }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Actions</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="btn-group-vertical" style="width:100%;">
+                        <a href="{{ url_for('generate_campaign_topics', campaign_id=campaign.id) }}" class="btn btn-primary">Generate Topics</a>
+                        <a href="{{ url_for('campaign_topics', campaign_id=campaign.id) }}" class="btn btn-info">View & Manage Topics ({{ campaign.topic_count }})</a>
+                        <a href="{{ url_for('generate_campaign_content', campaign_id=campaign.id) }}" class="btn btn-info" {% if campaign.unused_topic_count == 0 %}disabled{% endif %}>Generate Content</a>
+                        <a href="{{ url_for('schedule_campaign', campaign_id=campaign.id) }}" class="btn btn-success">Schedule Posts</a>
+                        <a href="{{ url_for('list_campaigns') }}" class="btn btn-default">Back to Campaigns</a>
+                          <a href="{{ url_for('campaign_content', campaign_id=campaign.id) }}" class="btn btn-info">View Generated Content</a>
+        
+        <a href="{{ url_for('schedule_campaign', campaign_id=campaign.id) }}" class="btn btn-success">Schedule Posts</a>
+        <a href="{{ url_for('list_campaigns') }}" class="btn btn-default">Back to Campaigns</a>
+                    </div>
+                    
+                    <hr style="margin-top: 15px; margin-bottom: 15px;">
+                    
+                    <form method="post" action="{{ url_for('delete_campaign', campaign_id=campaign.id) }}" style="display:block;">
+                        <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('WARNING: Are you sure you want to delete this campaign?\n\nThis will permanently delete all topics, content, and settings associated with this campaign.')">Delete Campaign</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Campaign Workflow</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="progress">
+                        {% if campaign.topic_count > 0 and campaign.scheduled_post_count > 0 %}
+                            <div class="progress-bar progress-bar-success" style="width: 100%">Complete</div>
+                        {% elif campaign.topic_count > 0 %}
+                            <div class="progress-bar progress-bar-info" style="width: 66%">Content Generated</div>
+                        {% elif campaign.topic_count == 0 %}
+                            <div class="progress-bar progress-bar-warning" style="width: 33%">Campaign Created</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row text-center">
+                        <div class="col-xs-4">
+                            <h4>1. Generate Topics</h4>
+                            <p>Create AI-generated topics for your campaign</p>
+                        </div>
+                        <div class="col-xs-4">
+                            <h4>2. Generate Content</h4>
+                            <p>Turn topics into engaging LinkedIn posts</p>
+                        </div>
+                        <div class="col-xs-4">
+                            <h4>3. Schedule Posts</h4>
+                            <p>Automatically schedule posts for your campaign duration</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

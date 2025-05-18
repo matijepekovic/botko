@@ -1,0 +1,56 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Add Content to Repository{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li class="active"><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Add Content to Repository</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <form method="post" action="{{ url_for('add_content') }}">
+                <div class="form-group">
+                    <label for="post_text">Post Content</label>
+                    <textarea class="form-control" id="post_text" name="post_text" rows="5" required></textarea>
+                    <small class="form-text text-muted">Enter the text for your LinkedIn post. You can include hashtags.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Category (Optional)</label>
+                    <input type="text" class="form-control" id="category" name="category" list="categories">
+                    <datalist id="categories">
+                        {% for category in categories %}
+                            <option value="{{ category }}">
+                        {% endfor %}
+                    </datalist>
+                    <small class="form-text text-muted">Categorize your content to help with organization and auto-scheduling.</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Add to Repository</button>
+                <a href="{{ url_for('content_repository') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

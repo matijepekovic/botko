@@ -1,0 +1,83 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Auto Schedule Posts{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+    <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+    <li class="active"><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+    <li><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+    <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Auto Schedule Posts</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="alert alert-info">
+                <p>You have <strong>{{ unused_count }}</strong> unused posts in your content repository.</p>
+            </div>
+            
+            <form method="post" action="{{ url_for('auto_schedule') }}">
+                <div class="form-group">
+                    <label for="num_posts">Number of Posts to Schedule</label>
+                    <input type="number" class="form-control" id="num_posts" name="num_posts" value="7" min="1" max="30" required>
+                    <small class="form-text text-muted">How many posts should be automatically scheduled?</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="days_ahead">Days to Schedule Ahead</label>
+                    <input type="number" class="form-control" id="days_ahead" name="days_ahead" value="7" min="1" max="30" required>
+                    <small class="form-text text-muted">How many days into the future should posts be scheduled?</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Category Filter (Optional)</label>
+                    <select class="form-control" id="category" name="category">
+                        <option value="">All Categories</option>
+                        {% for category in categories %}
+                            <option value="{{ category }}">{{ category }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Optionally limit posts to a specific category.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Post Time Range</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="start_hour">Start Hour (24h)</label>
+                            <input type="number" class="form-control" id="start_hour" name="start_hour" value="9" min="0" max="23" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="end_hour">End Hour (24h)</label>
+                            <input type="number" class="form-control" id="end_hour" name="end_hour" value="17" min="0" max="23" required>
+                        </div>
+                    </div>
+                    <small class="form-text text-muted">Posts will be scheduled randomly within this time range.</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Auto Schedule Posts</button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

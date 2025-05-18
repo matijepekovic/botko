@@ -1,0 +1,173 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block title %}Generate Campaign Content{% endblock %}
+
+{% block styles %}
+    {{ super() }}
+    <style>
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        #loading-text {
+            margin-top: 20px;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        #progress-container {
+            width: 80%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        
+        #progress-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: #00ff00;
+        }
+        
+        .processing-spinner {
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #3498db;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="{{ url_for('index') }}">LinkedIn Bot</a>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="{{ url_for('index') }}">Scheduled Posts</a></li>
+                <li><a href="{{ url_for('content_repository') }}">Content Repository</a></li>
+                <li><a href="{{ url_for('auto_schedule') }}">Auto Schedule</a></li>
+                <li class="active"><a href="{{ url_for('list_campaigns') }}">Campaigns</a></li>
+                <li><a href="{{ url_for('posts_for_review') }}">Posts for Review</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <h1 class="mt-4 mb-4">Generate Content for Campaign</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Store campaign_id as a data attribute in the form -->
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Content Generation</h3>
+                </div>
+                <div class="panel-body">
+                    <form id="content-generation-form" method="post" action="{{ url_for('generate_campaign_content', campaign_id=campaign_id) }}" data-campaign-id="{{ campaign_id }}">
+                        <div class="form-group">
+                            <label for="provider_name">AI Provider:</label>
+                            <select class="form-control" id="provider_name" name="provider_name">
+                                <option value="openai">OpenAI (GPT-4/3.5)</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="claude">Anthropic Claude</option>
+                            </select>
+                            <small class="text-muted">Select your preferred AI provider.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="api_key">AI API Key:</label>
+                            <input type="password" class="form-control" id="api_key" name="api_key" required>
+                            <small class="text-muted">Your API key is not stored on the server.</small>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Generate Content for All Topics</button>
+                        <a href="{{ url_for('campaign_detail', campaign_id=campaign_id) }}" class="btn btn-default">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title">About Content Generation</h3>
+                </div>
+                <div class="panel-body">
+                    <p>This step transforms your topics into complete LinkedIn posts using AI.</p>
+                    <p>The system will:</p>
+                    <ul>
+                        <li>Select all unused topics from your campaign</li>
+                        <li>Generate professional content for each topic</li>
+                        <li>Adapt content length based on topic complexity</li>
+                        <li>Include relevant hashtags and calls to action</li>
+                    </ul>
+                    <p>All generated content will be stored in your content repository for later scheduling.</p>
+                </div>
+            </div>
+            
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <h3 class="panel-title">API Provider Information</h3>
+                </div>
+                <div class="panel-body">
+                    <p><strong>OpenAI:</strong> Requires an API key from <a href="https://platform.openai.com/" target="_blank">OpenAI Platform</a>. Works with GPT-4 or GPT-3.5.</p>
+                    <p><strong>Google Gemini:</strong> Requires an API key from <a href="https://ai.google.dev/" target="_blank">Google AI Studio</a>. Uses the Gemini Pro model.</p>
+                    <p><strong>Anthropic Claude:</strong> Requires an API key from <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a>. Uses Claude 3 Sonnet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+    <div class="processing-spinner"></div>
+    <div id="loading-text">Generating content for all topics...</div>
+    <div id="progress-container">
+        <div class="progress">
+            <div id="progress-bar" class="progress-bar progress-bar-striped active" role="progressbar" style="width: 0%;">
+                0%
+            </div>
+        </div>
+    </div>
+    <div id="progress-log"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <!-- Include the external JavaScript file with NO Jinja variables -->
+    <script src="{{ url_for('static', filename='js/campaign_content.js') }}"></script>
+{% endblock %}
